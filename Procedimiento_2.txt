@@ -1,0 +1,108 @@
+delimiter //
+CREATE PROCEDURE `Base_Fraude`()
+begin
+
+drop table if exists  bdriesgofraude.Base_Fraude_1;
+
+Create table bdriesgofraude.Base_Fraude_1 as 
+Select Distinct a.eve_id as Evento_Id
+,cast(a.eve_fecha as date) as Fecha_Evento
+,a.Amb_Id as Ambito_Id
+,b.Amb_Descripcion as Descripcion_Ambito
+,a.Eve_nro_poliza as Numero_Poliza
+,a.Eve_poliza_vencimiento as Vencimiento_Poliza
+,c.aten_id as Atencion_Prestada_Id
+,e.aten_descripcion as Descripcion_Atencion_Prestada
+,c.sal_id as Salida_Id
+,f.sal_nombre as Salida_Descripcion
+#,g.con_sub_objetivo as Objetivo_Control_medico
+#,g.con_analisis as Analisis_Control_Medico
+#,g.epi_ingreso as Ingreso_Epicrisis
+#,g.epi_egreso	 as Egreso_Epicrisis
+#,g.epi_plan_ambu as Plan_Ambulatorio_Epicrisis
+#,g.epi_examenes_complementarios as Examenes_Complementarios_Epicrisis
+from bdriesgofraude.Evento a 
+left join bdriesgofraude.Ambito b on a.Amb_Id=b.Amb_Id
+left join bdriesgofraude.Evento_Ordenes c on a.eve_id=c.eve_id and c.ord_fecha_inicial is not null
+left join bdriesgofraude.atencion_presentada e on c.aten_id=e.aten_id
+left join bdriesgofraude.Salida f on c.sal_id=f.sal_id;
+
+drop table if exists bdriesgofraude.Base_Fraude_2 ;
+
+Create table bdriesgofraude.Base_Fraude_2 as 
+select a.*
+,b.ar_id as Area_Rural_Id
+,f.ar_descripcion as Descripcion_Area_Rural
+,b.fur_descripcion as Furips_Descripcion
+,b.ciu_id as Ciudad_Id
+,c.Ciu_Descripcion as Ciudad
+,fur_marca as Marca_Vehiculo
+,d.estve_descripcion as Estado_Vehiculo_Descripcion
+,b.tipve_id as Tipo_Vehiculo_Id
+,Case when e.tipve_descripcion=' Públic' then 'Publico' 
+      when b.fur_descripcion like '%MOTOCARRO%' then 'Publico' 
+else e.tipve_descripcion  end  Tipo_Vehiculo_Descripcion
+,case when  b.fur_descripcion like '%CONDUCTOR DE MOTOCICLETA%'  then 'Motocicleta'
+      when  b.fur_descripcion like '%PARRILLERA DE MOTOCICLETA%'  then 'Motocicleta'
+	  when  b.fur_descripcion like '%PARRILLERO DE MOTOCICLETA%' then 'Motocicleta'
+      when  b.fur_descripcion like '%MOTOCICLE%' then 'Motocicleta'
+	  when b.fur_marca in ('AKT', 'TVS','BAJAJ','YAMAHA','BAJAJ ','TVS ','YAMAHA ','AKT' ) then 'Motocicleta'
+      When b.fur_descripcion like '%AUTOBUS%' then 'Autobus'
+       else 'Automovil' end Tipo_Vehiculo
+,b.conac_id as Condicion_Accidentado_Id
+,g.conac_descripcion as Condicion_Accidentado_Descripcion
+from  bdriesgofraude.Base_Fraude_1 a 
+left join bdriesgofraude.Furips b on a.Evento_id=b.Eve_id
+left join bdriesgofraude.Ciudad c on b.Ciu_Id=c.Ciu_Id
+left join bdriesgofraude.estado_vehiculo d on b.estve_id=d.estve_id
+left join bdriesgofraude.tipo_vehiculo e on b.tipve_id=e.tipve_id
+left join bdriesgofraude.area_rural f on b.ar_id=f.ar_id
+left join bdriesgofraude.condicion_accidentado g on b.conac_id=g.conac_id;
+
+drop table if exists  bdriesgofraude.Base_Fraude_3;
+
+Create table bdriesgofraude.Base_Fraude_3 as 
+select distinct a.*
+,e.cat_descripcion as Categoria_Descripcion_Eje10
+from bdriesgofraude.Base_Fraude_2 a 
+left join bdriesgofraude.Historia_Clinica b on a.Evento_Id=b.eve_id
+left join bdriesgofraude.Historia_Clinica_Detalle c on b.his_id=c.his_id
+left join bdriesgofraude.Codigo_Eje10  d on c.cod_id=d.cod_id
+left join bdriesgofraude.Categoria_Codigo_Eje10 e on  d.cat_id=e.cat_id;
+
+drop table if exists bdriesgofraude.Facturacion_1;
+
+create table bdriesgofraude.Facturacion_1 as
+select Distinct b.Eve_Id
+,a.fac_consecutivo as Fac_Consecutivo
+from bdriesgofraude.Factura a 
+left join bdriesgofraude.Factura_Detalle b on a.fac_id=b.fac_id;
+
+drop table if exists bdriesgofraude.Facturacion_2;
+
+create table bdriesgofraude.Facturacion_2 as
+select Distinct 
+b.Eve_Id
+,b.Fac_Consecutivo
+,a.CAUSAL as Causa_Glosa	
+,a.MOTIVO as Motivo_Glosa	
+,a.Codigo_Interna as Codigo_Interno_Glosa
+,a.Ramo
+from bdriesgofraude.Glosas a 
+inner join bdriesgofraude.Facturacion_1 b on a.Factura=b.Fac_Consecutivo;
+
+drop table if exists bdriesgofraude.Base_Fraude;
+
+create table bdriesgofraude.Base_Fraude as
+select distinct a.*
+#,b.Causa_Glosa
+#,b.Motivo_Glosa
+#,b.Codigo_Interno_Glosa
+,Case when Codigo_Interno_Glosa in ('Poliza Falsa','Poliza Prestada','NO Accidentes de Transito') then 'SI' else 'NO' end Fraude
+from bdriesgofraude.Base_Fraude_3 a 
+left join bdriesgofraude.Facturacion_2 b on a.Evento_Id=b.Eve_Id
+where Evento_Id is not null;
+
+end
+
+//
